@@ -1,0 +1,19 @@
+[package]
+name = "drawing_ggez"
+version = "0.1.0"
+authors = ["pallaria"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# cgmath = { path="../offline_src/cgmath",version="0.17.0", features=["mint"] }
+# ggez = { path="../offline_src/ggez", version="0.5.1"}
+# rand = { path="../offline_src/rand", version="0.7.3"}
+# nalgebra = { path="../offline_src/nalgebra", version="0.19"}
+ggez = "0.5.1"
+nalgebra = "0.19"
+ncollide2d = "0.21.0"
+nphysics2d= "0.13.1"
+# ncollide2d = { path="../offline_src/ncollide/build/ncollide2d", version="0.21.1"}
+# nphysics2d = { path="../offline_src/nphysics/build/nphysics2d", version="0.13.1"}
