@@ -14,6 +14,6 @@ edition = "2018"
 ggez = "0.5.1"
 nalgebra = "0.19"
 ncollide2d = "0.21.0"
-nphysics2d= "0.13.1"
+nphysics2d= "0.13.0"
 # ncollide2d = { path="../offline_src/ncollide/build/ncollide2d", version="0.21.1"}
 # nphysics2d = { path="../offline_src/nphysics/build/nphysics2d", version="0.13.1"}

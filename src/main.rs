@@ -1,7 +1,7 @@
 #![allow(unused,warnings)]
 // look we changed the thing!
 
-use nalgebra;
+use nalgebra as nal;
 use std::path;
 
 use ggez::{event, timer, conf, graphics};
@@ -11,6 +11,7 @@ use ggez::graphics::{DrawParam, DrawMode, Rect, MeshBuilder, Color};
 use ggez::input::keyboard::{self, KeyCode, KeyMods};
 
 use ncollide2d::shape::{Cuboid, ShapeHandle};
+use ncollide2d::pipeline::narrow_phase::ContactEvent;
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use nphysics2d::joint::DefaultJointConstraintSet;
 use nphysics2d::object::{
@@ -293,12 +294,23 @@ fn create_level(rows:i32, cols:i32, assets: &mut Assets) -> Vec::<Actor> {
     };
     (0..(rows*cols)).map(new_block).collect()
 }
+struct Handle {
+    col: Vec<DefaultColliderHandle>,
+    rb: Vec<DefaultBodyHandle>,
+}
+impl Handle {
+    fn new() -> Handle {
+        Handle {
+            col: Vec::new(),
+            rb: Vec::new(),
+        }
+    }
+}
 struct MainState {
-    paddle: Actor,
-    ball: Actor,
-    blocks: Vec<Actor>,
-    test_block: Actor,
-    level: i32,
+    block1: Actor,
+    block2: Actor,
+    handle1: Handle,
+    handle2: Handle,
     assets: Assets,
     input: InputState,
     screen_width: f32,
@@ -307,55 +319,89 @@ struct MainState {
 }
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-
+        let mut block1 = create_block();
+        let mut block2 = create_block();
+        block2.pos.y += 100.0;
         let mut assets = Assets::new(ctx)?;
-        let mut paddle = create_paddle();
-        let mut ball = create_ball();
-        let mut test_block = create_block();
-        test_block.pos.x = -(WINDOW_DIM_X / 2.0) + test_block.size.x * 0.5;
-        test_block.pos.y = (WINDOW_DIM_Y / 2.0) - test_block.size.y * 0.5;
-        paddle.size.x = 100.0;
-        paddle.size.y = 20.0;
-        paddle.pos.x = 0.0;
-        paddle.pos.y = -(WINDOW_DIM_Y / 2.0) + paddle.size.y * 0.5;
-        ball.size.x = 16.0;
-        ball.size.y = 16.0;
-        ball.pos.x = 0.0;
-        ball.pos.y = -(WINDOW_DIM_Y / 2.0) + paddle.size.y + (ball.size.y * 0.5);
-
-        let mut blocks = create_level(5, 10, &mut assets);
         let (width, height) = graphics::drawable_size(ctx);
         let mut p_world = PhysicsWorld {
-            mechanical: DefaultMechanicalWorld::new(nalgebra::Vector2::new(0.0, -9.81)),
+            mechanical: DefaultMechanicalWorld::new(nal::Vector2::new(0.0, -9.81)),
             geometrical: DefaultGeometricalWorld::new(),
             bodies: DefaultBodySet::new(),
             colliders: DefaultColliderSet::new(),
             joint_constraints: DefaultJointConstraintSet::new(),
             force_generators: DefaultForceGeneratorSet::new(),
         };
-
-        let s = MainState {
-            paddle,
-            ball,
-            blocks,
-            test_block,
-            level: 0,
+        let mut s = MainState {
+            block1,
+            block2,
+            handle1: Handle::new(),
+            handle2: Handle::new(),
             assets,
             input: InputState::default(),
             screen_width: width,
             screen_height: height,
             p_world,
         };
+        s.load_physics_handles();
         Ok(s)
     }
-    fn handle_collisions(&mut self) {
-        for b in &mut self.blocks {
-                handle_collision_block(&mut self.ball, b);
-        }
-        handle_collision_paddle(&mut self.ball, &self.paddle, &self.input);
+    fn load_physics_handles(&mut self) {
+        // create the rigid bodies and add them to the set
+        let mut rb_desc1 = RigidBodyDesc::new()
+            .gravity_enabled(false)
+            .mass(1.2)
+            .position(nal::Isometry2::new(
+                nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0)
+            );
+        let mut rb_desc2 = RigidBodyDesc::new()
+            .gravity_enabled(false)
+            .mass(1.2)
+            .position(nal::Isometry2::new(
+                nal::Vector2::new(self.block2.pos.x, self.block2.pos.y), 0.0)
+            );
+        let rb1 = rb_desc1.build();
+        let rb2 = rb_desc2.build();
+        self.handle1.rb.push(self.p_world.bodies.insert(rb1));
+        self.handle2.rb.push(self.p_world.bodies.insert(rb2));
+
+        let shape1 = ShapeHandle::new(
+            Cuboid::new(nal::Vector2::<f32>::new(self.block1.size.x, self.block1.size.y))
+        );
+        let shape2 = ShapeHandle::new(
+            Cuboid::new(nal::Vector2::<f32>::new(self.block2.size.x, self.block2.size.y))
+        );
+        let collider_1 = ColliderDesc::new(shape1)
+            .position(nal::Isometry2::new(
+                nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0)
+            )
+            .set_ccd_enabled(true)
+            .build(BodyPartHandle(self.handle1.rb[0], 0));
+
+        let collider_2 = ColliderDesc::new(shape2)
+            .position(nal::Isometry2::new(
+                nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0)
+            )
+            .set_ccd_enabled(true)
+            .build(BodyPartHandle(self.handle2.rb[0], 0));
+        self.handle1.col.push(self.p_world.colliders.insert(collider_1));
+        self.handle2.col.push(self.p_world.colliders.insert(collider_2));
     }
-    fn clear_dead_stuff(&mut self) {
-        self.blocks.retain(|b| b.life > 0.0);
+    fn handle_contact_events(&mut self) {
+        for contact in self.p_world.geometrical.contact_events() {
+            if let &ContactEvent::Started(collider1, collider2) = contact {
+                print!("\nContact!\n");
+            }
+        }
+    }
+    fn update_collider_pos(&mut self) {
+        self.block1.pos.y += 0.3;
+        let new_pos = nal::Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0);
+        let body1 = self.p_world.bodies.rigid_body_mut(self.handle1.rb[0]).unwrap();
+        let collider1 = self.p_world.colliders.get_mut(self.handle1.col[0]).unwrap();
+
+        body1.set_position(new_pos);
+        collider1.set_position(new_pos);
     }
 }
 fn draw_actor(
@@ -376,33 +422,17 @@ fn draw_actor(
     let drawparams = graphics::DrawParam::new()
         .dest(pos)
         .scale(scale)
-        .color(actor.color)
+        .color(actor.color);
 //        .rotation(std::f32::consts::PI / 4.0)
-        .offset(Point2::new(0.5, 0.5));
+//        .offset(Point2::new(0.5, 0.5));
     graphics::draw(ctx, image, drawparams)
 }
 impl ggez::event::EventHandler for MainState {
     fn update (&mut self, ctx: &mut Context) -> GameResult<()> {
-        // handle_collisions();
-        // clear_dead_stuff(); (dead blocks?)
         const DESIRED_FPS: u32 = 60;
 
         while timer::check_update_time(ctx, DESIRED_FPS) {
             let seconds = 1.0 / (DESIRED_FPS as f32);
-
-            player_handle_input(&mut self.paddle, &self.input, seconds);
-            player_thrust(&mut self.ball, seconds);
-
-            update_actor_position(&mut self.paddle, &self.input, seconds, PADDLE_MAX_VEL);
-            if self.input.stuck {
-                self.ball.pos.x = self.paddle.pos.x;
-                self.ball.pos.y = self.paddle.pos.y + self.paddle.size.y * 0.5 + self.ball.size.y * 0.5;
-            } else {
-                update_actor_position(&mut self.ball, &self.input, seconds, BALL_MAX_VEL);
-            }
-            self.handle_collisions();
-
-            self.clear_dead_stuff();
 
             self.p_world.mechanical.step(
                 &mut self.p_world.geometrical,
@@ -411,21 +441,40 @@ impl ggez::event::EventHandler for MainState {
                 &mut self.p_world.joint_constraints,
                 &mut self.p_world.force_generators,
             );
-
+            self.update_collider_pos();
+            self.handle_contact_events();
+/*
+            player_handle_input(&mut self.paddle, &self.input, seconds);
+            player_thrust(&mut self.ball, seconds);
+            update_actor_position(&mut self.paddle, &self.input, seconds, PADDLE_MAX_VEL);
+            if self.input.stuck {
+                self.ball.pos.x = self.paddle.pos.x;
+                self.ball.pos.y = self.paddle.pos.y + self.paddle.size.y * 0.5 + self.ball.size.y * 0.5;
+            } else {
+                update_actor_position(&mut self.ball, &self.input, seconds, BALL_MAX_VEL);
+            }
+            self.handle_collisions();
+            self.clear_dead_stuff();
             if self.ball.pos.y < -(WINDOW_DIM_Y / 2.0) {
                 print!("\nGAME OVER!\n");
                 let _ = event::quit(ctx);
             }
+*/
         }
         Ok(())
     }
     fn draw (&mut self, ctx: &mut Context) -> GameResult<()> {
-
+        let assets = &mut self.assets;
         graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
 
+        draw_actor(assets, ctx, &self.block1, (self.screen_width, self.screen_height))?;
+        draw_actor(assets, ctx, &self.block2, (self.screen_width, self.screen_height))?;
+
+        graphics::present(ctx)?;
+        Ok(())
+/*
         let assets = &mut self.assets;
         let radian = std::f32::consts::PI / 4.0;
-
         for b in &mut self.blocks {
             if b.life > 0.0 {
                 draw_actor(assets, ctx, b, (self.screen_width, self.screen_height))?;
@@ -433,8 +482,7 @@ impl ggez::event::EventHandler for MainState {
         }
         draw_actor(assets, ctx, &self.paddle, (self.screen_width, self.screen_height))?;
         draw_actor(assets, ctx, &self.ball, (self.screen_width, self.screen_height))?;
-        graphics::present(ctx)?;
-        Ok(())
+*/
     }
     fn key_down_event(
         &mut self,
