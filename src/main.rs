@@ -12,6 +12,7 @@ use ggez::input::keyboard::{self, KeyCode, KeyMods};
 
 use ncollide2d::shape::{Cuboid, ShapeHandle};
 use ncollide2d::pipeline::narrow_phase::ContactEvent;
+use nphysics2d::algebra::{Velocity2};
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use nphysics2d::joint::DefaultJointConstraintSet;
 use nphysics2d::object::{
@@ -322,10 +323,10 @@ impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let mut block1 = create_block();
         let mut block2 = create_block();
-        block2.pos.x += 100.0;
-        block2.pos.y -= 100.0;
-//        block2.size.x = 200.0;
-//        block2.size.y = 50.0;
+        block2.pos.x -= 205.0;
+        block2.pos.y -= 200.0;
+        block2.size.x = 400.0;
+        block2.size.y = 50.0;
         let mut assets = Assets::new(ctx)?;
         let (width, height) = graphics::drawable_size(ctx);
         let mut p_world = PhysicsWorld {
@@ -354,8 +355,9 @@ impl MainState {
     fn load_physics_handles(&mut self) {
         // create the rigid bodies and add them to the set
         let mut rb_desc1 = RigidBodyDesc::new()
-            .gravity_enabled(false)
-            .mass(1.2)
+            .gravity_enabled(true)
+            .mass(3.0)
+//            .velocity(Velocity2::linear(0.0, -50.0))
             .position(nal::Isometry2::new(
                 nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0)
             );
@@ -366,10 +368,11 @@ impl MainState {
                 nal::Vector2::new(self.block2.pos.x, self.block2.pos.y), 0.0)
             );
 //        let ground_handle = self.p_world.bodies.insert(Ground::new());
-        let rb1 = rb_desc1.build();
+        let mut rb1 = rb_desc1.build();
+        rb1.enable_all_rotations();
         let rb2 = rb_desc2.build();
         self.handle1.rb.push(self.p_world.bodies.insert(rb1));
-        self.handle2.rb.push(self.p_world.bodies.insert(rb2));
+        self.handle2.rb.push(self.p_world.bodies.insert(Ground::new()));
 
         let shape1 = ShapeHandle::new(
             Cuboid::new(nal::Vector2::<f32>::new(self.block1.size.x / 2.0, self.block1.size.y / 2.0))
@@ -378,21 +381,10 @@ impl MainState {
             Cuboid::new(nal::Vector2::<f32>::new(self.block2.size.x / 2.0, self.block2.size.y / 2.0))
         );
         let collider_1 = ColliderDesc::new(shape1)
-        /*
-            .position(nal::Isometry2::new(
-                nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0)
-            )
-        */
-            .set_ccd_enabled(true)
             .build(BodyPartHandle(self.handle1.rb[0], 0));
 
         let collider_2 = ColliderDesc::new(shape2)
-        /*
-            .position(nal::Isometry2::new(
-                nal::Vector2::new(self.block2.pos.x, self.block2.pos.y), 0.0)
-            )
-        */
-            .set_ccd_enabled(true)
+            .translation(nal::Vector2::new(self.block2.pos.x, self.block2.pos.y))
             .build(BodyPartHandle(self.handle2.rb[0], 0));
 
         self.handle1.col.push(self.p_world.colliders.insert(collider_1));
@@ -408,16 +400,23 @@ impl MainState {
         }
     }
     fn update_collider_pos(&mut self) {
+            let body1 = self.p_world.bodies.rigid_body_mut(self.handle1.rb[0]).unwrap();
+            let collider1 = self.p_world.colliders.get_mut(self.handle1.col[0]).unwrap();
+            let body_pos = body1.position();
+            print!("\nbody_pos rotation: {}\n", body_pos.rotation);
+            self.block1.pos.x = body_pos.translation.vector.x;
+            self.block1.pos.y = body_pos.translation.vector.y;
+
+/*
         if !self.contact {
             self.block1.pos.x += 1.0;
             self.block1.pos.y -= 1.0;
             let new_pos = nal::Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0);
             let body1 = self.p_world.bodies.rigid_body_mut(self.handle1.rb[0]).unwrap();
             let collider1 = self.p_world.colliders.get_mut(self.handle1.col[0]).unwrap();
-
             body1.set_position(new_pos);
-            collider1.set_position(new_pos);
         }
+*/
     }
 }
 fn draw_actor(
