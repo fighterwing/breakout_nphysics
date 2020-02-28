@@ -246,7 +246,7 @@ fn create_block() -> Actor {
     Actor {
         tag: ActorType::Block,
         pos: Point2::origin(),
-        size: Point2::new(64.0, 38.4),
+        size: Point2::new(64.0, 32.0),
         color: Color::new(0.8, 0.4, 0.0, 1.0),
         facing: 0.,
         velocity: na::zero(),
@@ -322,8 +322,10 @@ impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let mut block1 = create_block();
         let mut block2 = create_block();
-        block2.pos.x -= 105.0;
-        block2.pos.y -= 50.0;
+        block2.pos.x += 100.0;
+        block2.pos.y -= 100.0;
+//        block2.size.x = 200.0;
+//        block2.size.y = 50.0;
         let mut assets = Assets::new(ctx)?;
         let (width, height) = graphics::drawable_size(ctx);
         let mut p_world = PhysicsWorld {
@@ -363,6 +365,7 @@ impl MainState {
             .position(nal::Isometry2::new(
                 nal::Vector2::new(self.block2.pos.x, self.block2.pos.y), 0.0)
             );
+//        let ground_handle = self.p_world.bodies.insert(Ground::new());
         let rb1 = rb_desc1.build();
         let rb2 = rb_desc2.build();
         self.handle1.rb.push(self.p_world.bodies.insert(rb1));
@@ -375,34 +378,39 @@ impl MainState {
             Cuboid::new(nal::Vector2::<f32>::new(self.block2.size.x / 2.0, self.block2.size.y / 2.0))
         );
         let collider_1 = ColliderDesc::new(shape1)
+        /*
             .position(nal::Isometry2::new(
                 nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0)
             )
+        */
             .set_ccd_enabled(true)
             .build(BodyPartHandle(self.handle1.rb[0], 0));
 
         let collider_2 = ColliderDesc::new(shape2)
+        /*
             .position(nal::Isometry2::new(
-                nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0)
+                nal::Vector2::new(self.block2.pos.x, self.block2.pos.y), 0.0)
             )
+        */
             .set_ccd_enabled(true)
             .build(BodyPartHandle(self.handle2.rb[0], 0));
+
         self.handle1.col.push(self.p_world.colliders.insert(collider_1));
         self.handle2.col.push(self.p_world.colliders.insert(collider_2));
     }
     fn handle_contact_events(&mut self) {
         for contact in self.p_world.geometrical.contact_events() {
             if let &ContactEvent::Started(collider1, collider2) = contact {
-                print!("\nContact at {}, {}\n", self.block1.pos.x, self.block1.pos.y);
-                print!("\nblock2: {}, {}\n", self.block2.pos.x, self.block2.pos.y);
+                print!("\nBlock 1 contact at: {}, {}\n", self.block1.pos.x, self.block1.pos.y);
+                print!("\nBlock 2 contact at: {}, {}\n", self.block2.pos.x, self.block2.pos.y);
                 self.contact = true;
             }
         }
     }
     fn update_collider_pos(&mut self) {
         if !self.contact {
-            self.block1.pos.x -= 0.3;
-            self.block1.pos.y -= 0.3;
+            self.block1.pos.x += 1.0;
+            self.block1.pos.y -= 1.0;
             let new_pos = nal::Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0);
             let body1 = self.p_world.bodies.rigid_body_mut(self.handle1.rb[0]).unwrap();
             let collider1 = self.p_world.colliders.get_mut(self.handle1.col[0]).unwrap();
