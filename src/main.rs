@@ -316,12 +316,14 @@ struct MainState {
     screen_width: f32,
     screen_height: f32,
     p_world: PhysicsWorld,
+    contact: bool,
 }
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let mut block1 = create_block();
         let mut block2 = create_block();
-        block2.pos.y += 100.0;
+        block2.pos.x -= 105.0;
+        block2.pos.y -= 50.0;
         let mut assets = Assets::new(ctx)?;
         let (width, height) = graphics::drawable_size(ctx);
         let mut p_world = PhysicsWorld {
@@ -342,6 +344,7 @@ impl MainState {
             screen_width: width,
             screen_height: height,
             p_world,
+            contact:false,
         };
         s.load_physics_handles();
         Ok(s)
@@ -366,10 +369,10 @@ impl MainState {
         self.handle2.rb.push(self.p_world.bodies.insert(rb2));
 
         let shape1 = ShapeHandle::new(
-            Cuboid::new(nal::Vector2::<f32>::new(self.block1.size.x, self.block1.size.y))
+            Cuboid::new(nal::Vector2::<f32>::new(self.block1.size.x / 2.0, self.block1.size.y / 2.0))
         );
         let shape2 = ShapeHandle::new(
-            Cuboid::new(nal::Vector2::<f32>::new(self.block2.size.x, self.block2.size.y))
+            Cuboid::new(nal::Vector2::<f32>::new(self.block2.size.x / 2.0, self.block2.size.y / 2.0))
         );
         let collider_1 = ColliderDesc::new(shape1)
             .position(nal::Isometry2::new(
@@ -390,18 +393,23 @@ impl MainState {
     fn handle_contact_events(&mut self) {
         for contact in self.p_world.geometrical.contact_events() {
             if let &ContactEvent::Started(collider1, collider2) = contact {
-                print!("\nContact!\n");
+                print!("\nContact at {}, {}\n", self.block1.pos.x, self.block1.pos.y);
+                print!("\nblock2: {}, {}\n", self.block2.pos.x, self.block2.pos.y);
+                self.contact = true;
             }
         }
     }
     fn update_collider_pos(&mut self) {
-        self.block1.pos.y += 0.3;
-        let new_pos = nal::Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0);
-        let body1 = self.p_world.bodies.rigid_body_mut(self.handle1.rb[0]).unwrap();
-        let collider1 = self.p_world.colliders.get_mut(self.handle1.col[0]).unwrap();
+        if !self.contact {
+            self.block1.pos.x -= 0.3;
+            self.block1.pos.y -= 0.3;
+            let new_pos = nal::Isometry2::new(nal::Vector2::new(self.block1.pos.x, self.block1.pos.y), 0.0);
+            let body1 = self.p_world.bodies.rigid_body_mut(self.handle1.rb[0]).unwrap();
+            let collider1 = self.p_world.colliders.get_mut(self.handle1.col[0]).unwrap();
 
-        body1.set_position(new_pos);
-        collider1.set_position(new_pos);
+            body1.set_position(new_pos);
+            collider1.set_position(new_pos);
+        }
     }
 }
 fn draw_actor(
@@ -422,9 +430,9 @@ fn draw_actor(
     let drawparams = graphics::DrawParam::new()
         .dest(pos)
         .scale(scale)
-        .color(actor.color);
+        .color(actor.color)
 //        .rotation(std::f32::consts::PI / 4.0)
-//        .offset(Point2::new(0.5, 0.5));
+        .offset(Point2::new(0.5, 0.5));
     graphics::draw(ctx, image, drawparams)
 }
 impl ggez::event::EventHandler for MainState {
